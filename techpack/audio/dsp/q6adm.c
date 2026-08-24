@@ -68,6 +68,9 @@ struct adm_copp {
 	atomic_t channels[AFE_MAX_PORTS][MAX_COPPS_PER_PORT];
 	atomic_t app_type[AFE_MAX_PORTS][MAX_COPPS_PER_PORT];
 	atomic_t acdb_id[AFE_MAX_PORTS][MAX_COPPS_PER_PORT];
+	#ifdef CONFIG_MACH_OPLUS_SM7150
+	atomic_t session_type[AFE_MAX_PORTS][MAX_COPPS_PER_PORT];
+	#endif
 	wait_queue_head_t wait[AFE_MAX_PORTS][MAX_COPPS_PER_PORT];
 	wait_queue_head_t adm_delay_wait[AFE_MAX_PORTS][MAX_COPPS_PER_PORT];
 	atomic_t adm_delay_stat[AFE_MAX_PORTS][MAX_COPPS_PER_PORT];
@@ -277,8 +280,14 @@ static int adm_get_copp_id(int port_idx, int copp_idx)
 	return atomic_read(&this_adm.copp.id[port_idx][copp_idx]);
 }
 
+#ifndef CONFIG_MACH_OPLUS_SM7150
 static int adm_get_idx_if_copp_exists(int port_idx, int topology, int mode,
 				 int rate, int bit_width, int app_type)
+#else
+static int adm_get_idx_if_copp_exists(int port_idx, int topology, int mode,
+				 int rate, int bit_width, int app_type,
+				 int session_type)
+#endif
 {
 	int idx;
 
@@ -286,6 +295,7 @@ static int adm_get_idx_if_copp_exists(int port_idx, int topology, int mode,
 		 __func__, port_idx, topology, mode, rate, bit_width);
 
 	for (idx = 0; idx < MAX_COPPS_PER_PORT; idx++)
+		#ifndef CONFIG_MACH_OPLUS_SM7150
 		if ((topology ==
 			atomic_read(&this_adm.copp.topology[port_idx][idx])) &&
 		    (mode == atomic_read(&this_adm.copp.mode[port_idx][idx])) &&
@@ -294,6 +304,19 @@ static int adm_get_idx_if_copp_exists(int port_idx, int topology, int mode,
 			atomic_read(&this_adm.copp.bit_width[port_idx][idx])) &&
 		    (app_type ==
 			atomic_read(&this_adm.copp.app_type[port_idx][idx])))
+		#else
+		if ((topology ==
+			atomic_read(&this_adm.copp.topology[port_idx][idx])) &&
+		    (mode == atomic_read(&this_adm.copp.mode[port_idx][idx])) &&
+		    (rate == atomic_read(&this_adm.copp.rate[port_idx][idx])) &&
+		    (bit_width ==
+			atomic_read(&this_adm.copp.bit_width[port_idx][idx])) &&
+			(session_type ==
+			atomic_read(
+				&this_adm.copp.session_type[port_idx][idx])) &&
+		    (app_type ==
+			atomic_read(&this_adm.copp.app_type[port_idx][idx])))
+		#endif
 			return idx;
 	return -EINVAL;
 }
@@ -1528,6 +1551,10 @@ static void adm_reset_data(void)
 			    &this_adm.copp.app_type[i][j], 0);
 			atomic_set(
 			   &this_adm.copp.acdb_id[i][j], 0);
+			#ifdef CONFIG_MACH_OPLUS_SM7150
+			atomic_set(
+				&this_adm.copp.session_type[i][j], 0);
+			#endif
 			this_adm.copp.adm_status[i][j] =
 				ADM_STATUS_CALIBRATION_REQUIRED;
 		}
@@ -2171,9 +2198,17 @@ static struct cal_block_data *adm_find_cal_by_path(int cal_index, int path)
 		if (cal_utils_is_cal_stale(cal_block))
 			continue;
 
+		#ifndef CONFIG_MACH_OPLUS_SM7150
 		if (cal_index == ADM_AUDPROC_CAL ||
 		    cal_index == ADM_LSM_AUDPROC_CAL ||
-		    cal_index == ADM_LSM_AUDPROC_PERSISTENT_CAL) {
+		    cal_index == ADM_LSM_AUDPROC_PERSISTENT_CAL)
+		#else
+		if (cal_index == ADM_AUDPROC_CAL ||
+		    cal_index == ADM_LSM_AUDPROC_CAL ||
+		    cal_index == ADM_LSM_AUDPROC_PERSISTENT_CAL ||
+		    cal_index == ADM_AUDPROC_PERSISTENT_CAL)
+		#endif
+		{
 			audproc_cal_info = cal_block->cal_info;
 			if ((audproc_cal_info->path == path) &&
 			    (cal_block->cal_data.size > 0))
@@ -2209,9 +2244,17 @@ static struct cal_block_data *adm_find_cal_by_app_type(int cal_index, int path,
 		if (cal_utils_is_cal_stale(cal_block))
 			continue;
 
+		#ifndef CONFIG_MACH_OPLUS_SM7150
 		if (cal_index == ADM_AUDPROC_CAL ||
 		    cal_index == ADM_LSM_AUDPROC_CAL ||
-		    cal_index == ADM_LSM_AUDPROC_PERSISTENT_CAL) {
+		    cal_index == ADM_LSM_AUDPROC_PERSISTENT_CAL)
+		#else
+		if (cal_index == ADM_AUDPROC_CAL ||
+		    cal_index == ADM_LSM_AUDPROC_CAL ||
+		    cal_index == ADM_LSM_AUDPROC_PERSISTENT_CAL ||
+		    cal_index == ADM_AUDPROC_PERSISTENT_CAL)
+		#endif
+		{
 			audproc_cal_info = cal_block->cal_info;
 			if ((audproc_cal_info->path == path) &&
 			    (audproc_cal_info->app_type == app_type) &&
@@ -2250,9 +2293,17 @@ static struct cal_block_data *adm_find_cal(int cal_index, int path,
 		if (cal_utils_is_cal_stale(cal_block))
 			continue;
 
+		#ifndef CONFIG_MACH_OPLUS_SM7150
 		if (cal_index == ADM_AUDPROC_CAL ||
 		    cal_index == ADM_LSM_AUDPROC_CAL ||
-		    cal_index == ADM_LSM_AUDPROC_PERSISTENT_CAL) {
+		    cal_index == ADM_LSM_AUDPROC_PERSISTENT_CAL)
+		#else
+		if (cal_index == ADM_AUDPROC_CAL ||
+		    cal_index == ADM_LSM_AUDPROC_CAL ||
+		    cal_index == ADM_LSM_AUDPROC_PERSISTENT_CAL ||
+		    cal_index == ADM_AUDPROC_PERSISTENT_CAL)
+		#endif
+		{
 			audproc_cal_info = cal_block->cal_info;
 			if ((audproc_cal_info->path == path) &&
 			    (audproc_cal_info->app_type == app_type) &&
@@ -2343,6 +2394,11 @@ static void send_adm_cal(int port_id, int copp_idx, int path, int perf_mode,
 	if (passthr_mode != LISTEN) {
 		send_adm_cal_type(ADM_AUDPROC_CAL, path, port_id, copp_idx,
 				perf_mode, app_type, acdb_id, sample_rate);
+		#ifdef CONFIG_MACH_OPLUS_SM7150
+		send_adm_cal_type(ADM_AUDPROC_PERSISTENT_CAL, path,
+				  port_id, copp_idx, perf_mode, app_type,
+				  acdb_id, sample_rate);
+		#endif
 	} else {
 		send_adm_cal_type(ADM_LSM_AUDPROC_CAL, path, port_id, copp_idx,
 				  perf_mode, app_type, acdb_id, sample_rate);
@@ -2829,8 +2885,15 @@ static int adm_arrange_mch_ep2_map_v8(
  *
  * Returns 0 on success or error on failure
  */
+#ifndef CONFIG_MACH_OPLUS_SM7150
 int adm_open(int port_id, int path, int rate, int channel_mode, int topology,
 	     int perf_mode, uint16_t bit_width, int app_type, int acdb_id)
+#else
+#define VOICE_TOPOLOGY_LVIMFQ_TX_DM    0x1000BFF5
+int adm_open(int port_id, int path, int rate, int channel_mode, int topology,
+	     int perf_mode, uint16_t bit_width, int app_type, int acdb_id,
+	     int session_type)
+#endif
 {
 	struct adm_cmd_device_open_v5	open;
 	struct adm_cmd_device_open_v6	open_v6;
@@ -2913,6 +2976,15 @@ int adm_open(int port_id, int path, int rate, int channel_mode, int topology,
 			rate = 16000;
 	}
 
+#ifdef CONFIG_MACH_OPLUS_SM7150
+	if ((topology == VOICE_TOPOLOGY_LVIMFQ_TX_DM)
+		&& (rate != ADM_CMD_COPP_OPEN_SAMPLE_RATE_48K)) {
+		pr_info("%s: Change rate %d to 48K for copp 0x%x",
+			__func__, rate, topology);
+		rate = 48000;
+	}
+#endif
+
 	if (topology == FFECNS_TOPOLOGY) {
 		this_adm.ffecns_port_id = port_id;
 		pr_debug("%s: ffecns port id =%x\n", __func__,
@@ -2928,10 +3000,17 @@ int adm_open(int port_id, int path, int rate, int channel_mode, int topology,
 	 * This isn't allowed for ULL streams as per the DSP interface
 	 */
 	if (perf_mode != ULTRA_LOW_LATENCY_PCM_MODE)
+		#ifndef CONFIG_MACH_OPLUS_SM7150
 		copp_idx = adm_get_idx_if_copp_exists(port_idx, topology,
 						      perf_mode,
 						      rate, bit_width,
 						      app_type);
+		#else
+		copp_idx = adm_get_idx_if_copp_exists(port_idx, topology,
+						      perf_mode,
+						      rate, bit_width,
+						      app_type, session_type);
+		#endif
 
 	if (copp_idx < 0) {
 		copp_idx = adm_get_next_available_copp(port_idx);
@@ -2955,6 +3034,10 @@ int adm_open(int port_id, int path, int rate, int channel_mode, int topology,
 			   app_type);
 		atomic_set(&this_adm.copp.acdb_id[port_idx][copp_idx],
 			   acdb_id);
+		#ifdef CONFIG_MACH_OPLUS_SM7150
+		atomic_set(&this_adm.copp.session_type[port_idx][copp_idx],
+			session_type);
+		#endif
 		set_bit(ADM_STATUS_CALIBRATION_REQUIRED,
 		(void *)&this_adm.copp.adm_status[port_idx][copp_idx]);
 		if ((path != ADM_PATH_COMPRESSED_RX) &&
@@ -3134,7 +3217,13 @@ int adm_open(int port_id, int path, int rate, int channel_mode, int topology,
 			open.endpoint_id_1 = tmp_port;
 			open.endpoint_id_2 = 0xFFFF;
 
-			if (this_adm.ec_ref_rx && (path != 1)) {
+			#ifndef CONFIG_MACH_OPLUS_SM7150
+			if (this_adm.ec_ref_rx && (path != 1))
+			#else
+			if (this_adm.ec_ref_rx && (path != 1) &&
+				(afe_get_port_type(tmp_port) == MSM_AFE_PORT_TYPE_TX))
+			#endif
+			{
 				open.endpoint_id_2 = this_adm.ec_ref_rx;
 			}
 
@@ -3662,6 +3751,9 @@ int adm_close(int port_id, int perf_mode, int copp_idx)
 		atomic_set(&this_adm.copp.channels[port_idx][copp_idx], 0);
 		atomic_set(&this_adm.copp.bit_width[port_idx][copp_idx], 0);
 		atomic_set(&this_adm.copp.app_type[port_idx][copp_idx], 0);
+		#ifdef CONFIG_MACH_OPLUS_SM7150
+		atomic_set(&this_adm.copp.session_type[port_idx][copp_idx], 0);
+		#endif
 
 		clear_bit(ADM_STATUS_CALIBRATION_REQUIRED,
 			(void *)&this_adm.copp.adm_status[port_idx][copp_idx]);
@@ -3897,6 +3989,11 @@ static int get_cal_type_index(int32_t cal_type)
 	case ADM_LSM_AUDPROC_PERSISTENT_CAL_TYPE:
 		ret = ADM_LSM_AUDPROC_PERSISTENT_CAL;
 		break;
+	#ifdef CONFIG_MACH_OPLUS_SM7150
+	case ADM_AUDPROC_PERSISTENT_CAL_TYPE:
+		ret = ADM_AUDPROC_PERSISTENT_CAL;
+		break;
+	#endif
 	default:
 		pr_err("%s: invalid cal type %d!\n", __func__, cal_type);
 	}
@@ -4124,6 +4221,13 @@ static int adm_init_cal_data(void)
 		  adm_set_cal, NULL, NULL} },
 		 {adm_map_cal_data, adm_unmap_cal_data,
 		  cal_utils_match_buf_num} },
+		#ifdef CONFIG_MACH_OPLUS_SM7150
+		{{ADM_AUDPROC_PERSISTENT_CAL_TYPE,
+		 {adm_alloc_cal, adm_dealloc_cal, NULL,
+		  adm_set_cal, NULL, NULL} },
+		 {adm_map_cal_data, adm_unmap_cal_data,
+		  cal_utils_match_buf_num} },
+		#endif
 	};
 	pr_debug("%s:\n", __func__);
 
@@ -4642,6 +4746,15 @@ int adm_store_cal_data(int port_id, int copp_idx, int path, int perf_mode,
 			rc = -ENOMEM;
 			goto unlock;
 		}
+	#ifdef CONFIG_MACH_OPLUS_SM7150
+	} else if (cal_index == ADM_AUDPROC_PERSISTENT_CAL) {
+		if (cal_block->cal_data.size > AUD_PROC_PERSIST_BLOCK_SIZE) {
+			pr_err("%s:persist invalid size exp/actual[%zd, %d]\n",
+				__func__, cal_block->cal_data.size, *size);
+			rc = -ENOMEM;
+			goto unlock;
+		}
+	#endif
 	} else if (cal_index == ADM_AUDVOL_CAL) {
 		if (cal_block->cal_data.size > AUD_VOL_BLOCK_SIZE) {
 			pr_err("%s:aud_vol:invalid size exp/actual[%zd, %d]\n",
