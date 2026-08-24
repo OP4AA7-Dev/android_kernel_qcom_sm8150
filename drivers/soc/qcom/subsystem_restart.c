@@ -1827,6 +1827,9 @@ struct subsys_device *subsys_register(struct subsys_desc *desc)
 	subsys->dev.bus = &subsys_bus_type;
 	subsys->dev.release = subsys_device_release;
 	subsys->notif_state = -1;
+	#ifdef CONFIG_MACH_OPLUS_SM7150
+	subsys->restart_level = RESET_SUBSYS_COUPLED;
+	#endif
 	subsys->desc->sysmon_pid = -1;
 	subsys->desc->state = NULL;
 	strlcpy(subsys->desc->fw_name, desc->name,
