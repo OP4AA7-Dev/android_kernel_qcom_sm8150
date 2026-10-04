@@ -18,7 +18,9 @@
 #include "dsi_ctrl_reg.h"
 #include "dsi_hw.h"
 #include "dsi_catalog.h"
-
+#ifdef CONFIG_MACH_OPLUS_SM7150
+#include "sde_dbg.h"
+#endif
 #define DISP_CC_MISC_CMD_REG_OFF 0x00
 
 /* register to configure DMA scheduling */
@@ -123,6 +125,9 @@ void dsi_ctrl_hw_kickoff_non_embedded_mode(struct dsi_ctrl_hw *ctrl,
 
 	if (!(flags & DSI_CTRL_HW_CMD_WAIT_FOR_TRIGGER))
 		DSI_W32(ctrl, DSI_CMD_MODE_DMA_SW_TRIGGER, 0x1);
+#ifdef CONFIG_MACH_OPLUS_SM7150
+	SDE_EVT32(ctrl->index, cmd->offset, cmd->length);
+#endif
 }
 
 /*

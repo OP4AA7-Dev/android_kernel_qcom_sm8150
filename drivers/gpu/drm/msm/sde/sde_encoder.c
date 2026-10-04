@@ -39,6 +39,11 @@
 #include "sde_core_irq.h"
 #include "sde_hw_top.h"
 #include "sde_hw_qdss.h"
+#ifdef CONFIG_MACH_OPLUS_SM7150
+#include "oppo_display_private_api.h"
+#include "oppo_onscreenfingerprint.h"
+#include "oppo_dc_diming.h"
+#endif /* CONFIG_MACH_OPLUS_SM7150 */
 
 #define SDE_DEBUG_ENC(e, fmt, ...) SDE_DEBUG("enc%d " fmt,\
 		(e) ? (e)->base.base.id : -1, ##__VA_ARGS__)
@@ -280,6 +285,9 @@ struct sde_encoder_virt {
 	struct kthread_work input_event_work;
 	struct kthread_work esd_trigger_work;
 	struct input_handler *input_handler;
+#ifdef CONFIG_MACH_OPLUS_SM7150
+	bool input_handler_init;
+#endif /* CONFIG_MACH_OPLUS_SM7150 */
 	bool input_handler_registered;
 	struct msm_display_topology topology;
 	bool vblank_enabled;
@@ -3128,6 +3136,9 @@ static int _sde_encoder_input_handler(
 
 	sde_enc->input_handler = input_handler;
 	sde_enc->input_handler_registered = false;
+#ifdef CONFIG_MACH_OPLUS_SM7150
+	sde_enc->input_handler_init = false;
+#endif /* CONFIG_MACH_OPLUS_SM7150 */
 
 	return rc;
 }
@@ -3301,7 +3312,15 @@ static void sde_encoder_virt_enable(struct drm_encoder *drm_enc)
 			SDE_ERROR(
 			"input handler registration failed, rc = %d\n", ret);
 		else
+#ifndef CONFIG_MACH_OPLUS_SM7150
 			sde_enc->input_handler_registered = true;
+#else
+           {
+			sde_enc->input_handler_registered = true;
+            sde_enc->input_handler_init = true;
+           }
+#endif /* CONFIG_MACH_OPLUS_SM7150 */
+
 	}
 
 	if (!(msm_is_mode_seamless_vrr(cur_mode)
@@ -3404,8 +3423,16 @@ static void sde_encoder_virt_disable(struct drm_encoder *drm_enc)
 	sde_encoder_wait_for_event(drm_enc, MSM_ENC_TX_COMPLETE);
 
 	if (sde_enc->input_handler && sde_enc->input_handler_registered) {
-		input_unregister_handler(sde_enc->input_handler);
-		sde_enc->input_handler_registered = false;
+	#ifdef CONFIG_MACH_OPLUS_SM7150
+	    if (sde_enc->input_handler_init) {
+			input_unregister_handler(sde_enc->input_handler);
+			sde_enc->input_handler_init = false;
+	    }
+			sde_enc->input_handler_registered = false;
+	#else
+	    input_unregister_handler(sde_enc->input_handler);
+	    sde_enc->input_handler_registered = false;
+	#endif /* OPLUS_BUG_STABILITY */
 	}
 
 	/*
@@ -4254,7 +4281,11 @@ void sde_encoder_trigger_kickoff_pending(struct drm_encoder *drm_enc)
 
 static void _sde_encoder_setup_dither(struct sde_encoder_phys *phys)
 {
+#ifndef CONFIG_MACH_OPLUS_SM7150
 	void *dither_cfg = NULL;
+#else
+	void *dither_cfg;
+#endif /* CONFIG_MACH_OPLUS_SM7150 */
 	int ret = 0, rc, i = 0;
 	size_t len = 0;
 	enum sde_rm_topology_name topology;
@@ -4288,9 +4319,14 @@ static void _sde_encoder_setup_dither(struct sde_encoder_phys *phys)
 		return;
 	}
 
+#ifndef CONFIG_MACH_OPLUS_SM7150
 	ret = sde_connector_get_dither_cfg(phys->connector,
 			phys->connector->state, &dither_cfg,
 			&len, sde_enc->idle_pc_restore);
+#else
+	ret = sde_connector_get_dither_cfg(phys->connector,
+			phys->connector->state, &dither_cfg, &len);
+#endif
 	if (ret)
 		return;
 
@@ -4303,6 +4339,9 @@ static void _sde_encoder_setup_dither(struct sde_encoder_phys *phys)
 			}
 		}
 	} else {
+#ifdef CONFIG_MACH_OPLUS_SM7150
+		if (_sde_encoder_setup_dither_for_onscreenfingerprint(phys, dither_cfg, len))
+#endif /* CONFIG_MACH_OPLUS_SM7150 */
 		phys->hw_pp->ops.setup_dither(phys->hw_pp, dither_cfg, len);
 	}
 }
@@ -4675,6 +4714,13 @@ int sde_encoder_prepare_for_kickoff(struct drm_encoder *drm_enc,
 	SDE_DEBUG_ENC(sde_enc, "\n");
 	SDE_EVT32(DRMID(drm_enc));
 
+#ifdef CONFIG_MACH_OPLUS_SM7150
+	if (sde_enc->cur_master) {
+		sde_connector_update_backlight(sde_enc->cur_master->connector, false);
+		sde_connector_update_hbm(sde_enc->cur_master->connector);
+	}
+#endif /* CONFIG_MACH_OPLUS_SM7150 */
+
 	/* save this for later, in case of errors */
 	if (sde_enc->cur_master && sde_enc->cur_master->ops.get_wr_line_count)
 		ln_cnt1 = sde_enc->cur_master->ops.get_wr_line_count(
@@ -4843,6 +4889,10 @@ void sde_encoder_kickoff(struct drm_encoder *drm_enc, bool is_error)
 	}
 
 	SDE_ATRACE_END("encoder_kickoff");
+#ifdef CONFIG_MACH_OPLUS_SM7150
+   sde_connector_update_backlight(sde_enc->cur_master->connector, true);
+#endif /* CONFIG_MACH_OPLUS_SM7150 */
+
 }
 
 int sde_encoder_helper_reset_mixers(struct sde_encoder_phys *phys_enc,

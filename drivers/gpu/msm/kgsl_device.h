@@ -342,6 +342,10 @@ struct kgsl_device {
 	unsigned int num_l3_pwrlevels;
 	/* store current L3 vote to determine if we should change our vote */
 	unsigned int cur_l3_pwrlevel;
+        #ifdef CONFIG_MACH_OPLUS_SM7150
+        bool snapshot_control;
+        int snapshotfault;
+        #endif /* CONFIG_MACH_OPLUS_SM7150 */
 };
 
 #define KGSL_MMU_DEVICE(_mmu) \
@@ -547,6 +551,9 @@ struct kgsl_snapshot {
 	bool first_read;
 	bool gmu_fault;
 	bool recovered;
+	#ifdef CONFIG_MACH_OPLUS_SM7150
+	char snapshot_hashid[96];
+	#endif /* CONFIG_MACH_OPLUS_SM7150 */
 };
 
 /**

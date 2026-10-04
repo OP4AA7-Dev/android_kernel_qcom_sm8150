@@ -34,6 +34,9 @@
 #include <linux/slab.h>
 
 #include <video/mipi_display.h>
+#ifdef CONFIG_MACH_OPLUS_SM7150
+#include "./msm/sde_dbg.h"
+#endif
 
 /**
  * DOC: dsi helpers
@@ -724,6 +727,9 @@ ssize_t mipi_dsi_dcs_write(struct mipi_dsi_device *dsi, u8 cmd,
 		/* concatenate the DCS command byte and the payload */
 		tx[0] = cmd;
 		memcpy(&tx[1], data, len);
+#ifdef CONFIG_MACH_OPLUS_SM7150
+		SDE_EVT32(0x100, tx, size);
+#endif
 	} else {
 		tx = &cmd;
 		size = 1;
@@ -731,8 +737,15 @@ ssize_t mipi_dsi_dcs_write(struct mipi_dsi_device *dsi, u8 cmd,
 
 	err = mipi_dsi_dcs_write_buffer(dsi, tx, size);
 
+#ifndef CONFIG_MACH_OPLUS_SM7150
 	if (len > 0)
 		kfree(tx);
+#else
+	if (len > 0){
+ 		kfree(tx);
+		SDE_EVT32(0x200, tx, size);
+	}
+	#endif
 
 	return err;
 }
@@ -1069,7 +1082,11 @@ EXPORT_SYMBOL(mipi_dsi_dcs_set_tear_scanline);
 int mipi_dsi_dcs_set_display_brightness(struct mipi_dsi_device *dsi,
 					u16 brightness)
 {
+#ifndef CONFIG_MACH_OPLUS_SM7150
 	u8 payload[2] = { brightness & 0xff, brightness >> 8 };
+#else
+	u8 payload[2] = { brightness >> 8, brightness & 0xff };
+#endif
 	ssize_t err;
 
 	err = mipi_dsi_dcs_write(dsi, MIPI_DCS_SET_DISPLAY_BRIGHTNESS,

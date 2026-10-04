@@ -293,8 +293,6 @@ static int dsi_ctrl_check_state(struct dsi_ctrl *dsi_ctrl,
 	int rc = 0;
 	struct dsi_ctrl_state_info *state = &dsi_ctrl->current_state;
 
-	SDE_EVT32(dsi_ctrl->cell_index, op);
-
 	switch (op) {
 	case DSI_CTRL_OP_POWER_STATE_CHANGE:
 		if (state->power_state == op_state) {
@@ -1104,6 +1102,9 @@ void dsi_message_setup_tx_mode(struct dsi_ctrl *dsi_ctrl,
 	/* Check to see if cmd len plus header is greater than fifo size */
 	if ((cmd_len + 4) > DSI_EMBEDDED_MODE_DMA_MAX_SIZE_BYTES) {
 		*flags |= DSI_CTRL_CMD_NON_EMBEDDED_MODE;
+#ifdef CONFIG_MACH_OPLUS_SM7150
+		SDE_EVT32(cmd_len, flags);
+#endif
 		pr_debug("[%s] override to non-embedded mode,cmd len =%d\n",
 				dsi_ctrl->name, cmd_len);
 		return;
@@ -1179,7 +1180,9 @@ static int dsi_message_tx(struct dsi_ctrl *dsi_ctrl,
 		rc = -ENOTSUPP;
 		goto error;
 	}
-
+#ifdef CONFIG_MACH_OPLUS_SM7150
+	SDE_EVT32(0x100, flags);
+#endif
 	if (flags & DSI_CTRL_CMD_NON_EMBEDDED_MODE) {
 		cmd_mem.offset = dsi_ctrl->cmd_buffer_iova;
 		cmd_mem.en_broadcast = (flags & DSI_CTRL_CMD_BROADCAST) ?
@@ -1253,6 +1256,10 @@ static int dsi_message_tx(struct dsi_ctrl *dsi_ctrl,
 		cmd.use_lpm = (msg->flags & MIPI_DSI_MSG_USE_LPM) ?
 				  true : false;
 	}
+
+#ifdef CONFIG_MACH_OPLUS_SM7150
+	SDE_EVT32(cmd_mem.offset, cmd_mem.length, flags, msg->flags);
+#endif
 
 kickoff:
 	/* check if custom dma scheduling line needed */
@@ -1363,10 +1370,17 @@ kickoff:
 		 * result in smmu write faults with DSI as client.
 		 */
 		if (flags & DSI_CTRL_CMD_NON_EMBEDDED_MODE) {
+#ifdef CONFIG_MACH_OPLUS_SM7150
+			SDE_EVT32(0x500);
+#endif
 			dsi_hw_ops.soft_reset(&dsi_ctrl->hw);
 			dsi_ctrl->cmd_len = 0;
 		}
 	}
+#ifdef CONFIG_MACH_OPLUS_SM7150
+	SDE_EVT32(0x200);
+#endif
+
 error:
 	if (buffer)
 		devm_kfree(&dsi_ctrl->pdev->dev, buffer);
@@ -1677,7 +1691,9 @@ static int dsi_ctrl_buffer_deinit(struct dsi_ctrl *dsi_ctrl)
 			pr_err("failed to get address space\n");
 			return -ENOMEM;
 		}
-
+#ifdef CONFIG_MACH_OPLUS_SM7150
+		SDE_EVT32(dsi_ctrl->tx_cmd_buf);
+#endif
 		msm_gem_put_iova(dsi_ctrl->tx_cmd_buf, aspace);
 
 		mutex_lock(&dsi_ctrl->drm_dev->struct_mutex);
@@ -2363,7 +2379,9 @@ static bool dsi_ctrl_check_for_spurious_error_interrupts(
 	}
 	return false;
 }
-
+#ifdef CONFIG_MACH_OPLUS_SM7150
+bool dump_in_progress = false;
+#endif
 static void dsi_ctrl_handle_error_status(struct dsi_ctrl *dsi_ctrl,
 				unsigned long int error)
 {
@@ -2401,7 +2419,11 @@ static void dsi_ctrl_handle_error_status(struct dsi_ctrl *dsi_ctrl,
 							0, 0, 0, 0);
 			}
 		}
+#ifndef CONFIG_MACH_OPLUS_SM7150
 		pr_err("tx timeout error: 0x%lx\n", error);
+#else
+		pr_err_ratelimited("tx timeout error: 0x%lx\n", error);
+#endif
 	}
 
 	/* DSI FIFO OVERFLOW error */
@@ -2431,6 +2453,13 @@ static void dsi_ctrl_handle_error_status(struct dsi_ctrl *dsi_ctrl,
 						0, 0, 0, 0);
 		}
 		pr_err("dsi FIFO UNDERFLOW error: 0x%lx\n", error);
+#ifdef CONFIG_MACH_OPLUS_SM7150
+		if (!dump_in_progress) {
+			dump_in_progress = true;
+			SDE_EVT32(0x8888);
+			SDE_DBG_DUMP_WQ("all", "dbg_bus", "vbif_dbg_bus", "dsi_dbg_bus");
+		}
+#endif
 	}
 
 	/* DSI PLL UNLOCK error */
@@ -2450,6 +2479,9 @@ static void dsi_ctrl_handle_error_status(struct dsi_ctrl *dsi_ctrl,
 	 */
 	if (dsi_ctrl_check_for_spurious_error_interrupts(dsi_ctrl) &&
 				dsi_ctrl->esd_check_underway) {
+#ifdef CONFIG_MACH_OPLUS_SM7150
+		SDE_EVT32(0x500);
+#endif
 		dsi_ctrl->hw.ops.soft_reset(&dsi_ctrl->hw);
 		return;
 	}
@@ -2834,7 +2866,9 @@ int dsi_ctrl_soft_reset(struct dsi_ctrl *dsi_ctrl)
 {
 	if (!dsi_ctrl)
 		return -EINVAL;
-
+#ifdef CONFIG_MACH_OPLUS_SM7150
+	SDE_EVT32(dsi_ctrl->cell_index);
+#endif
 	mutex_lock(&dsi_ctrl->ctrl_lock);
 	dsi_ctrl->hw.ops.soft_reset(&dsi_ctrl->hw);
 	mutex_unlock(&dsi_ctrl->ctrl_lock);
@@ -3092,7 +3126,9 @@ int dsi_ctrl_cmd_tx_trigger(struct dsi_ctrl *dsi_ctrl, u32 flags)
 	/* Dont trigger the command if this is not the last ocmmand */
 	if (!(flags & DSI_CTRL_CMD_LAST_COMMAND))
 		return rc;
-
+#ifdef CONFIG_MACH_OPLUS_SM7150
+	SDE_EVT32(flags, dsi_ctrl->cell_index);
+#endif
 	mutex_lock(&dsi_ctrl->ctrl_lock);
 
 	if (!(flags & DSI_CTRL_CMD_BROADCAST_MASTER))
@@ -3142,12 +3178,18 @@ int dsi_ctrl_cmd_tx_trigger(struct dsi_ctrl *dsi_ctrl, u32 flags)
 					BIT(DSI_FIFO_OVERFLOW), false);
 
 		if (flags & DSI_CTRL_CMD_NON_EMBEDDED_MODE) {
+#ifdef CONFIG_MACH_OPLUS_SM7150
+			SDE_EVT32(0x500);
+#endif
 			dsi_ctrl->hw.ops.soft_reset(&dsi_ctrl->hw);
 			dsi_ctrl->cmd_len = 0;
 		}
 	}
 
 	mutex_unlock(&dsi_ctrl->ctrl_lock);
+#ifdef CONFIG_MACH_OPLUS_SM7150
+	SDE_EVT32(0x300, flags, dsi_ctrl->cell_index);
+#endif
 	return rc;
 }
 
@@ -3451,8 +3493,15 @@ int dsi_ctrl_set_vid_engine_state(struct dsi_ctrl *dsi_ctrl,
 	dsi_ctrl->hw.ops.video_engine_en(&dsi_ctrl->hw, on);
 
 	/* perform a reset when turning off video engine */
+#ifndef CONFIG_MACH_OPLUS_SM7150
 	if (!on)
 		dsi_ctrl->hw.ops.soft_reset(&dsi_ctrl->hw);
+#else
+	if (!on){
+		SDE_EVT32(0x500);
+		dsi_ctrl->hw.ops.soft_reset(&dsi_ctrl->hw);
+	}
+#endif
 
 	pr_debug("[DSI_%d] Set video engine state = %d\n", dsi_ctrl->cell_index,
 		 state);

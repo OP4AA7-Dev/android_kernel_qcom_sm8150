@@ -2,6 +2,7 @@
 ccflags-y := -I $(srctree)/include/drm -I $(srctree)/drivers/gpu/drm/msm -I $(srctree)/drivers/gpu/drm/msm/dsi-staging -I $(srctree)/drivers/gpu/drm/msm/dp
 ccflags-y += -I $(srctree)/drivers/gpu/drm/msm/display-manager
 ccflags-$(CONFIG_DRM_MSM_DSI) += -I $(srctree)/drivers/gpu/drm/msm/dsi
+ccflags-$(CONFIG_MACH_OPLUS_SM7150) += -I $(srctree)/drivers/gpu/drm/msm/oplus
 ccflags-$(CONFIG_DRM_MSM_DSI_PLL) += -I $(srctree)/drivers/gpu/drm/msm/dsi
 ccflags-y += -I $(srctree)/drivers/gpu/drm/msm/sde
 ccflags-y += -I $(srctree)/drivers/media/platform/msm/sde/rotator
@@ -218,5 +219,17 @@ msm_drm-$(CONFIG_DRM_MSM) += \
 	msm_prop.o \
 	msm_fence.o \
 	msm_debugfs.o
+
+msm_drm-$(CONFIG_MACH_OPLUS_SM7150) += oplus/oppo_dsi_support.o \
+	oplus/oppo_display_private_api.o \
+	oplus/oppo_dc_diming.o \
+	oplus/oppo_onscreenfingerprint.o \
+	oplus/oppo_aod.o \
+	oplus/oppo_ffl.o \
+	oplus/oppo_display_panel.o \
+	oplus/oppo_display_panel_power.o \
+	oplus/oppo_display_panel_seed.o \
+	oplus/oppo_display_panel_common.o \
+	oplus/oppo_display_panel_hbm.o
 
 obj-$(CONFIG_DRM_MSM)	+= msm_drm.o

@@ -35,7 +35,9 @@
 #include "kgsl_sync.h"
 #include "kgsl_trace.h"
 #include "kgsl_compat.h"
-
+#ifdef CONFIG_MACH_OPLUS_SM7150
+#include "../drm/msm/sde_dbg.h"
+#endif
 /*
  * Define an kmem cache for the memobj & sparseobj structures since we
  * allocate and free them so frequently
@@ -177,6 +179,10 @@ static void syncobj_timer(unsigned long data)
 
 	kgsl_drawobj_put(drawobj);
 	dev_err(device->dev, "--gpu syncpoint deadlock print end--\n");
+#ifdef CONFIG_MACH_OPLUS_SM7150
+	SDE_EVT32(0x909);
+	SDE_DBG_DUMP("all");
+#endif
 }
 
 /*

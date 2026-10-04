@@ -158,6 +158,9 @@ struct sde_plane_state {
 	bool const_alpha_en;
 	bool pending;
 	bool defer_prepare_fb;
+#ifdef CONFIG_MACH_OPLUS_SM7150
+	bool is_skip;
+#endif /* CONFIG_MACH_OPLUS_SM7150 */
 	uint32_t pipe_order_flags;
 
 	/* scaler configuration */

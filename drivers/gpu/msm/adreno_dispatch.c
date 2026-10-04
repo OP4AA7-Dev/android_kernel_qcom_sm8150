@@ -2183,6 +2183,9 @@ static int dispatcher_do_fault(struct adreno_device *adreno_dev)
 	if (gx_on)
 		adreno_readreg64(adreno_dev, ADRENO_REG_CP_RB_BASE,
 			ADRENO_REG_CP_RB_BASE_HI, &base);
+        #ifdef CONFIG_MACH_OPLUS_SM7150
+        device->snapshotfault = fault;
+        #endif /* CONFIG_MACH_OPLUS_SM7150 */
 
 	/*
 	 * Force the CP off for anything but a hard fault to make sure it is

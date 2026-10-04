@@ -627,6 +627,46 @@ static void kgsl_free_snapshot(struct kgsl_snapshot *snapshot)
 	KGSL_CORE_ERR("snapshot: objects released\n");
 }
 
+#ifdef CONFIG_MACH_OPLUS_SM7150
+/************************************************
+adreno.h
+#define ADRENO_SOFT_FAULT BIT(0)
+#define ADRENO_HARD_FAULT BIT(1)
+#define ADRENO_TIMEOUT_FAULT BIT(2)
+#define ADRENO_IOMMU_PAGE_FAULT BIT(3)
+#define ADRENO_PREEMPT_FAULT BIT(4)
+#define ADRENO_GMU_FAULT BIT(5)
+#define ADRENO_CTX_DETATCH_TIMEOUT_FAULT BIT(6)
+#define ADRENO_GMU_FAULT_SKIP_SNAPSHOT BIT(7)
+*************************************************/
+char* kgsl_get_reason(int faulttype, bool gmu_fault){
+	if(gmu_fault){
+		return "GMUFAULT";
+	}else{
+		switch(faulttype){
+			case 0:
+				return "SOFTFAULT";
+			case 1:
+				return "HANGFAULT";
+			case 2:
+				return "TIMEOUTFAULT";
+			case 3:
+				return "IOMMUPAGEFAULT";
+			case 4:
+				return "PREEMPTFAULT";
+			case 5:
+				return "GMUFAULT";
+			case 6:
+				return "CTXDETATCHFAULT";
+			case 7:
+				return "GMUSKIPFAULT";
+			default:
+				return "UNKNOW";
+		}
+	}
+}
+#endif /* CONFIG_MACH_OPLUS_SM7150 */
+
 /**
  * kgsl_snapshot() - construct a device snapshot
  * @device: device to snapshot
@@ -740,6 +780,16 @@ void kgsl_device_snapshot(struct kgsl_device *device,
 	pa = __pa(device->snapshot_memory.ptr);
 	KGSL_DRV_ERR(device, "%s snapshot created at pa %pa++0x%zx\n",
 			gmu_fault ? "GMU" : "GPU", &pa, snapshot->size);
+	#ifdef CONFIG_MACH_OPLUS_SM7150
+	if(context!= NULL){
+		dev_err(device->dev, "falut=%s, pid=%d, processname=%s\n",
+			kgsl_get_reason(device->snapshotfault, gmu_fault), context->proc_priv->pid, context->proc_priv->comm);
+
+		memset(snapshot->snapshot_hashid, '\0', sizeof(snapshot->snapshot_hashid));
+		scnprintf(snapshot->snapshot_hashid, sizeof(snapshot->snapshot_hashid), "%d@%s@%s",
+		context->proc_priv->pid, context->proc_priv->comm, kgsl_get_reason(device->snapshotfault, gmu_fault));
+	}
+	#endif /* CONFIG_MACH_OPLUS_SM7150 */
 
 	sysfs_notify(&device->snapshot_kobj, NULL, "timestamp");
 
@@ -817,6 +867,41 @@ static int snapshot_release(struct kgsl_device *device,
 	return ret;
 }
 
+#ifdef CONFIG_MACH_OPLUS_SM7150
+static bool snapshot_ontrol_on = 0;
+
+static ssize_t snapshot_control_show(struct kgsl_device *device, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%d\n", device->snapshot_control);
+}
+
+static ssize_t snapshot_control_store(struct kgsl_device *device, const char *buf,
+	size_t count)
+{
+	unsigned int val = 0;
+	int ret;
+
+	if (device && count > 0)
+		device->snapshot_control = 0;
+
+	ret = kgsl_sysfs_store(buf, &val);
+
+	if (!ret && device){
+		device->snapshot_control = (bool)val;
+		snapshot_ontrol_on = device->snapshot_control;
+	}
+
+	return (ssize_t) ret < 0 ? ret : count;
+}
+
+static ssize_t snapshot_hashid_show(struct kgsl_device *device, char *buf)
+{
+	if(device->snapshot == NULL)
+		return 0;
+	return strlcpy(buf, device->snapshot->snapshot_hashid, PAGE_SIZE);
+}
+#endif /* CONFIG_MACH_OPLUS_SM7150 */
+
 /* Dump the sysfs binary data to the user */
 static ssize_t snapshot_show(struct file *filep, struct kobject *kobj,
 	struct bin_attribute *attr, char *buf, loff_t off,
@@ -830,6 +915,13 @@ static ssize_t snapshot_show(struct file *filep, struct kobject *kobj,
 
 	if (device == NULL)
 		return 0;
+
+	#ifdef CONFIG_MACH_OPLUS_SM7150
+	if (snapshot_ontrol_on) {
+		dev_err(device->dev, "snapshot: snapshot_ontrol_on is true, skip snapshot\n");
+		return 0;
+	}
+	#endif /* CONFIG_MACH_OPLUS_SM7150 */
 
 	mutex_lock(&device->mutex);
 	snapshot = device->snapshot;
@@ -1058,6 +1150,11 @@ static SNAPSHOT_ATTR(snapshot_crashdumper, 0644, snapshot_crashdumper_show,
 static SNAPSHOT_ATTR(snapshot_legacy, 0644, snapshot_legacy_show,
 	snapshot_legacy_store);
 
+#ifdef CONFIG_MACH_OPLUS_SM7150
+static SNAPSHOT_ATTR(snapshot_hashid, 0666, snapshot_hashid_show, NULL);
+static SNAPSHOT_ATTR(snapshot_control, 0666, snapshot_control_show, snapshot_control_store);
+#endif /* CONFIG_MACH_OPLUS_SM7150 */
+
 static ssize_t snapshot_sysfs_show(struct kobject *kobj,
 	struct attribute *attr, char *buf)
 {
@@ -1139,6 +1236,9 @@ int kgsl_device_snapshot_init(struct kgsl_device *device)
 	device->force_panic = 0;
 	device->snapshot_crashdumper = 1;
 	device->snapshot_legacy = 0;
+	#ifdef CONFIG_MACH_OPLUS_SM7150
+	device->snapshot_control = 0;
+	#endif /* CONFIG_MACH_OPLUS_SM7150 */
 
 	/*
 	 * Set this to false so that we only ever keep the first snapshot around
@@ -1181,6 +1281,15 @@ int kgsl_device_snapshot_init(struct kgsl_device *device)
 
 	ret  = sysfs_create_file(&device->snapshot_kobj,
 			&attr_snapshot_legacy.attr);
+	#ifdef CONFIG_MACH_OPLUS_SM7150
+	ret  = sysfs_create_file(&device->snapshot_kobj, &attr_snapshot_hashid.attr);
+	if (ret)
+		return ret;
+
+	ret  = sysfs_create_file(&device->snapshot_kobj, &attr_snapshot_control.attr);
+	if (ret)
+		return ret;
+	#endif /* CONFIG_MACH_OPLUS_SM7150 */
 
 done:
 	return ret;
@@ -1208,6 +1317,9 @@ void kgsl_device_snapshot_close(struct kgsl_device *device)
 	device->snapshot_faultcount = 0;
 	device->force_panic = 0;
 	device->snapshot_crashdumper = 1;
+	#ifdef CONFIG_MACH_OPLUS_SM7150
+	device->snapshot_control = 0;
+	#endif /* CONFIG_MACH_OPLUS_SM7150 */
 }
 EXPORT_SYMBOL(kgsl_device_snapshot_close);
 

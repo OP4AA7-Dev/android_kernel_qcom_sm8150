@@ -150,7 +150,9 @@ static void _sde_rm_print_rsvps(
 	list_for_each_entry(rsvp, &rm->rsvps, list) {
 		SDE_DEBUG("%d rsvp[s%ue%u] topology %d\n", stage, rsvp->seq,
 				rsvp->enc_id, rsvp->topology);
+		#ifndef CONFIG_MACH_OPLUS_SM7150
 		SDE_EVT32(stage, rsvp->seq, rsvp->enc_id, rsvp->topology);
+		#endif
 	}
 
 	for (type = 0; type < SDE_HW_BLK_MAX; type++) {
@@ -164,13 +166,14 @@ static void _sde_rm_print_rsvps(
 				(blk->rsvp_nxt) ? blk->rsvp_nxt->seq : 0,
 				(blk->rsvp_nxt) ? blk->rsvp_nxt->enc_id : 0,
 				blk->type, blk->id);
-
+#ifndef CONFIG_MACH_OPLUS_SM7150
 			SDE_EVT32(stage,
 				(blk->rsvp) ? blk->rsvp->seq : 0,
 				(blk->rsvp) ? blk->rsvp->enc_id : 0,
 				(blk->rsvp_nxt) ? blk->rsvp_nxt->seq : 0,
 				(blk->rsvp_nxt) ? blk->rsvp_nxt->enc_id : 0,
 				blk->type, blk->id);
+#endif
 		}
 	}
 }
@@ -908,10 +911,11 @@ static int _sde_rm_reserve_lms(
 
 		if (ds[i])
 			ds[i]->rsvp_nxt = rsvp;
-
+#ifndef CONFIG_MACH_OPLUS_SM7150
 		SDE_EVT32(lm[i]->type, rsvp->enc_id, lm[i]->id, pp[i]->id,
 				dspp[i] ? dspp[i]->id : 0,
 				ds[i] ? ds[i]->id : 0);
+#endif
 	}
 
 	if (reqs->topology->top_name == SDE_RM_TOPOLOGY_PPSPLIT) {

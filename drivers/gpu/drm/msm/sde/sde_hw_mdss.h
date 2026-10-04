@@ -545,6 +545,10 @@ struct sde_hw_cp_cfg {
 	void *mixer_info;
 	u32 displayv;
 	u32 displayh;
+#ifdef CONFIG_MACH_OPLUS_SM7150
+	struct sde_hw_dspp *dspp[DSPP_MAX];
+	bool broadcast_disabled;
+#endif
 };
 
 /**

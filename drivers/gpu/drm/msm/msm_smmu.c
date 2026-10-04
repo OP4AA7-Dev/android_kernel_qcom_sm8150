@@ -431,7 +431,9 @@ struct msm_mmu *msm_smmu_new(struct device *dev,
 
 	return &smmu->base;
 }
-
+#ifdef CONFIG_MACH_OPLUS_SM7150
+extern bool dump_in_progress;
+#endif
 static int msm_smmu_fault_handler(struct iommu_domain *domain,
 		struct device *dev, unsigned long iova,
 		int flags, void *token)
@@ -451,8 +453,16 @@ static int msm_smmu_fault_handler(struct iommu_domain *domain,
 	DRM_ERROR("trigger dump, iova=0x%08lx, flags=0x%x\n", iova, flags);
 	DRM_ERROR("SMMU device:%s", client->dev ? client->dev->kobj.name : "");
 
+#ifndef CONFIG_MACH_OPLUS_SM7150
 	/* generate dump, but no panic */
 	SDE_DBG_DUMP("all", "dbg_bus", "vbif_dbg_bus");
+#else
+	if (!dump_in_progress) {
+		dump_in_progress = true;
+		/* generate dump, but no panic */
+		SDE_DBG_DUMP("all", "dbg_bus", "vbif_dbg_bus", "dsi_dbg_bus");
+	}
+#endif
 
 	/*
 	 * return -ENOSYS to allow smmu driver to dump out useful

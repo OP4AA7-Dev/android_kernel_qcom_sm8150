@@ -1004,6 +1004,9 @@ struct sde_reg_dma_cfg {
 	SDE_HW_BLK_INFO;
 	u32 version;
 	u32 trigger_sel_off;
+#ifdef CONFIG_MACH_OPLUS_SM7150
+	u32 broadcast_disabled;
+#endif
 	u32 xin_id;
 	u32 vbif_idx;
 	enum sde_clk_ctrl_type clk_ctrl;

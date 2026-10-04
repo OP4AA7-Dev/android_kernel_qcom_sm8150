@@ -32,6 +32,35 @@
 #include "sde_dbg.h"
 #include "dsi_parser.h"
 #include "dsi_phy.h"
+#ifdef CONFIG_MACH_OPLUS_SM7150
+#include <linux/msm_drm_notify.h>
+#include <linux/notifier.h>
+#include "oppo_display_private_api.h"
+#include "oppo_ffl.h"
+#include <soc/oplus/boot_mode.h>
+extern int msm_drm_notifier_call_chain(unsigned long val, void *v);
+/* Don't panic if smmu fault*/
+extern int sde_kms_set_smmu_no_fatal_faults(struct drm_device *drm);
+
+__attribute__((weak)) void sec_refresh_switch(int fps)
+{
+    return;
+}
+
+__attribute__((weak)) void lcd_tp_refresh_switch(int fps)
+{
+    return;
+}
+
+/* Add for solve sau issue*/
+extern int lcd_closebl_flag;
+/* Add for fingerprint silence*/
+extern int lcd_closebl_flag_fp;
+/* Add for ffl feature */
+extern bool oppo_ffl_trigger_finish;
+/* Add for first osc clk setting*/
+extern int osc_count;
+#endif
 
 #define to_dsi_display(x) container_of(x, struct dsi_display, host)
 #define INT_BASE_10 10
@@ -44,6 +73,11 @@
 
 #define DSI_CLOCK_BITRATE_RADIX 10
 #define MAX_TE_SOURCE_ID  2
+
+#ifdef CONFIG_MACH_OPLUS_SM7150
+static struct dsi_display *primary_display;
+static struct dsi_display *secondary_display;
+#endif
 
 DEFINE_MUTEX(dsi_display_clk_mutex);
 
@@ -204,6 +238,37 @@ int dsi_display_set_backlight(struct drm_connector *connector,
 		goto error;
 	}
 
+#ifdef CONFIG_MACH_OPLUS_SM7150
+	if ((bl_lvl == 0 && panel->bl_config.bl_level != 0) ||
+	    (bl_lvl != 0 && panel->bl_config.bl_level == 0))
+		pr_err("backlight level changed %d -> %d\n",
+		       panel->bl_config.bl_level, bl_lvl);
+
+	/* Add some delay to avoid screen flash */
+	if (panel->need_power_on_backlight && bl_lvl) {
+		panel->need_power_on_backlight = false;
+		rc = dsi_display_clk_ctrl(dsi_display->dsi_clk_handle,
+			DSI_CORE_CLK, DSI_CLK_ON);
+		if (rc) {
+			pr_err("[%s] failed to send DSI_CMD_POST_ON_BACKLIGHT cmds, rc=%d\n",
+			       panel->name, rc);
+			goto error;
+		}
+
+		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_POST_ON_BACKLIGHT);
+
+		rc = dsi_display_clk_ctrl(dsi_display->dsi_clk_handle,
+			DSI_CORE_CLK, DSI_CLK_OFF);
+		if (rc) {
+			pr_err("[%s] failed to send DSI_CMD_POST_ON_BACKLIGHT cmds, rc=%d\n",
+			       panel->name, rc);
+			goto error;
+		}
+
+		//oppo_start_ffl_thread();
+	}
+#endif
+
 	panel->bl_config.bl_level = bl_lvl;
 
 	/* scale backlight */
@@ -241,7 +306,11 @@ error:
 	return rc;
 }
 
+#ifndef CONFIG_MACH_OPLUS_SM7150
 static int dsi_display_cmd_engine_enable(struct dsi_display *display)
+#else
+int dsi_display_cmd_engine_enable(struct dsi_display *display)
+#endif
 {
 	int rc = 0;
 	int i;
@@ -285,7 +354,11 @@ done:
 	return rc;
 }
 
+#ifndef CONFIG_MACH_OPLUS_SM7150
 static int dsi_display_cmd_engine_disable(struct dsi_display *display)
+#else
+int dsi_display_cmd_engine_disable(struct dsi_display *display)
+#endif
 {
 	int rc = 0;
 	int i;
@@ -347,6 +420,9 @@ static void dsi_display_aspace_cb_locked(void *cb_data, bool is_detach)
 	dsi_panel_acquire_panel_lock(display->panel);
 
 	if (is_detach) {
+#ifdef CONFIG_MACH_OPLUS_SM7150
+		SDE_EVT32(0x100, display->tx_cmd_buf, display->cmd_buffer_iova);
+#endif
 		/* invalidate the stored iova */
 		display->cmd_buffer_iova = 0;
 
@@ -369,6 +445,9 @@ static void dsi_display_aspace_cb_locked(void *cb_data, bool is_detach)
 			pr_err("failed to get va rc %d\n", rc);
 			goto end;
 		}
+#ifdef CONFIG_MACH_OPLUS_SM7150
+		SDE_EVT32(0x200, display->vaddr,display->tx_cmd_buf, display->cmd_buffer_iova);
+#endif
 	}
 
 	display_for_each_ctrl(cnt, display) {
@@ -471,7 +550,11 @@ error:
 }
 
 /* Allocate memory for cmd dma tx buffer */
+#ifndef CONFIG_MACH_OPLUS_SM7150
 static int dsi_host_alloc_cmd_tx_buffer(struct dsi_display *display)
+#else
+int dsi_host_alloc_cmd_tx_buffer(struct dsi_display *display)
+#endif
 {
 	int rc = 0, cnt = 0;
 	struct dsi_display_ctrl *display_ctrl;
@@ -517,7 +600,9 @@ static int dsi_host_alloc_cmd_tx_buffer(struct dsi_display *display)
 		rc = -EINVAL;
 		goto put_iova;
 	}
-
+#ifdef CONFIG_MACH_OPLUS_SM7150
+	SDE_EVT32(display->cmd_buffer_iova, display->vaddr, display->tx_cmd_buf);
+#endif
 	display_for_each_ctrl(cnt, display) {
 		display_ctrl = &display->ctrl[cnt];
 		display_ctrl->ctrl->cmd_buffer_size = SZ_4K;
@@ -530,6 +615,9 @@ static int dsi_host_alloc_cmd_tx_buffer(struct dsi_display *display)
 	return rc;
 
 put_iova:
+#ifdef CONFIG_MACH_OPLUS_SM7150
+	SDE_EVT32(0x300, display->tx_cmd_buf, display->cmd_buffer_iova);
+#endif
 	msm_gem_put_iova(display->tx_cmd_buf, display->aspace);
 free_aspace_cb:
 	msm_gem_address_space_unregister_cb(display->aspace,
@@ -4652,6 +4740,14 @@ static int dsi_display_set_mode_sub(struct dsi_display *display,
 				pr_err("failed to add DSI PHY timing params");
 		}
 	}
+
+#ifdef CONFIG_MACH_OPLUS_SM7150
+	if (mode->dsi_mode_flags & DSI_MODE_FLAG_DYN_CLK) {
+		if(MSM_BOOT_MODE__NORMAL == get_boot_mode() && (osc_count != 0))
+			oppo_display_dynamic_clk_update_osc_clk(clk_rate);
+	}
+#endif
+
 error:
 	return rc;
 }
@@ -5491,6 +5587,13 @@ int dsi_display_dev_probe(struct platform_device *pdev)
 	dsi_display_parse_cmdline_topology(display, index);
 
 	platform_set_drvdata(pdev, display);
+
+#ifdef CONFIG_MACH_OPLUS_SM7150
+	if (!strcmp(dsi_type, "primary"))
+			primary_display = display;
+		else
+			secondary_display = display;
+#endif
 
 	rc = dsi_display_init(display);
 	if (rc)
@@ -6571,6 +6674,11 @@ int dsi_display_validate_mode_change(struct dsi_display *display,
 		/* dfps and dynamic clock with const fps use case */
 		if (dsi_display_mode_switch_dfps(cur_mode, adj_mode)) {
 			dsi_panel_get_dfps_caps(display->panel, &dfps_caps);
+#ifdef CONFIG_MACH_OPLUS_SM7150
+			if (cur_mode->timing.refresh_rate != adj_mode->timing.refresh_rate) {
+				pr_err("dsi_cmd set fps: %d\n", adj_mode->timing.refresh_rate);
+			}
+#endif
 			if (dfps_caps.dfps_support ||
 			    dyn_clk_caps->maintain_const_fps) {
 				pr_debug("mode switch is variable refresh\n");
@@ -6713,6 +6821,12 @@ int dsi_display_set_mode(struct dsi_display *display,
 		}
 	}
 
+#ifdef CONFIG_MACH_OPLUS_SM7150
+	sec_refresh_switch(adj_mode.timing.refresh_rate);
+
+	lcd_tp_refresh_switch(adj_mode.timing.refresh_rate);
+#endif
+
 	memcpy(display->panel->cur_mode, &adj_mode, sizeof(adj_mode));
 error:
 	mutex_unlock(&display->display_lock);
@@ -6825,7 +6939,9 @@ static void dsi_display_handle_fifo_underflow(struct work_struct *work)
 	}
 
 	pr_debug("handle DSI FIFO underflow error\n");
-
+#ifdef CONFIG_MACH_OPLUS_SM7150
+	SDE_EVT32(0x500);
+#endif
 	dsi_display_clk_ctrl(display->dsi_clk_handle,
 			DSI_ALL_CLKS, DSI_CLK_ON);
 	dsi_display_soft_reset(display);
@@ -7194,6 +7310,9 @@ int dsi_display_prepare(struct dsi_display *display)
 		 * ctl reset since the pnael and ctrl is already in active
 		 * state and panel on commands are not needed
 		 */
+#ifdef CONFIG_MACH_OPLUS_SM7150
+		SDE_EVT32(0x500);
+#endif
 		rc = dsi_display_soft_reset(display);
 		if (rc) {
 			pr_err("[%s] failed soft reset, rc=%d\n",
@@ -7526,6 +7645,9 @@ int dsi_display_enable(struct dsi_display *display)
 		}
 
 		display->panel->panel_initialized = true;
+#ifdef CONFIG_MACH_OPLUS_SM7150
+		set_oppo_display_power_status(OPPO_DISPLAY_POWER_ON);
+#endif
 		pr_debug("cont splash enabled, display enable not required\n");
 		return 0;
 	}
@@ -7627,9 +7749,17 @@ int dsi_display_post_enable(struct dsi_display *display)
 	}
 
 	/* remove the clk vote for CMD mode panels */
+#ifndef CONFIG_MACH_OPLUS_SM7150
 	if (display->config.panel_mode == DSI_OP_CMD_MODE)
 		dsi_display_clk_ctrl(display->dsi_clk_handle,
 			DSI_ALL_CLKS, DSI_CLK_OFF);
+#else
+	if (display->config.panel_mode == DSI_OP_CMD_MODE){
+		SDE_EVT32(SDE_EVTLOG_FUNC_CASE1);
+		dsi_display_clk_ctrl(display->dsi_clk_handle,
+			DSI_ALL_CLKS, DSI_CLK_OFF);
+	}
+#endif
 
 	mutex_unlock(&display->display_lock);
 	return rc;
@@ -7646,10 +7776,21 @@ int dsi_display_pre_disable(struct dsi_display *display)
 
 	mutex_lock(&display->display_lock);
 
+#ifdef CONFIG_MACH_OPLUS_SM7150
+	display->panel->need_power_on_backlight = false;
+#endif
 	/* enable the clk vote for CMD mode panels */
+#ifndef CONFIG_MACH_OPLUS_SM7150
 	if (display->config.panel_mode == DSI_OP_CMD_MODE)
 		dsi_display_clk_ctrl(display->dsi_clk_handle,
 			DSI_ALL_CLKS, DSI_CLK_ON);
+#else
+	if (display->config.panel_mode == DSI_OP_CMD_MODE){
+		SDE_EVT32(SDE_EVTLOG_FUNC_CASE1);
+		dsi_display_clk_ctrl(display->dsi_clk_handle,
+			DSI_ALL_CLKS, DSI_CLK_ON);
+	}
+#endif
 
 	if (display->poms_pending) {
 		if (display->config.panel_mode == DSI_OP_CMD_MODE)
@@ -7671,6 +7812,10 @@ int dsi_display_pre_disable(struct dsi_display *display)
 int dsi_display_disable(struct dsi_display *display)
 {
 	int rc = 0;
+#ifdef CONFIG_MACH_OPLUS_SM7150
+	int blank;
+	struct msm_drm_notifier notifier_data;
+#endif
 
 	if (!display) {
 		pr_err("Invalid params\n");
@@ -7701,6 +7846,14 @@ int dsi_display_disable(struct dsi_display *display)
 	}
 
 	if (!display->poms_pending) {
+#ifdef CONFIG_MACH_OPLUS_SM7150
+		blank = MSM_DRM_BLANK_POWERDOWN;
+		notifier_data.data = &blank;
+		notifier_data.id = 0;
+		msm_drm_notifier_call_chain(MSM_DRM_EARLY_EVENT_BLANK,
+							&notifier_data);
+#endif
+
 		rc = dsi_panel_disable(display->panel);
 		if (rc)
 			pr_err("[%s] failed to disable DSI panel, rc=%d\n",
@@ -7777,7 +7930,9 @@ int dsi_display_unprepare(struct dsi_display *display)
 			pr_err("[%s] failed to disable DSI PHY, rc=%d\n",
 			       display->name, rc);
 	}
-
+#ifdef CONFIG_MACH_OPLUS_SM7150
+	SDE_EVT32(SDE_EVTLOG_FUNC_CASE1);
+#endif
 	rc = dsi_display_clk_ctrl(display->dsi_clk_handle,
 			DSI_CORE_CLK, DSI_CLK_OFF);
 	if (rc)
@@ -7802,6 +7957,13 @@ int dsi_display_unprepare(struct dsi_display *display)
 	SDE_EVT32(SDE_EVTLOG_FUNC_EXIT);
 	return rc;
 }
+
+#ifdef CONFIG_MACH_OPLUS_SM7150
+struct dsi_display *get_main_display(void) {
+		return primary_display;
+}
+EXPORT_SYMBOL(get_main_display);
+#endif
 
 static int __init dsi_display_register(void)
 {

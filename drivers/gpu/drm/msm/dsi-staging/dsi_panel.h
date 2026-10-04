@@ -29,6 +29,12 @@
 #include "dsi_pwr.h"
 #include "dsi_parser.h"
 #include "msm_drv.h"
+#ifdef CONFIG_MACH_OPLUS_SM7150
+struct oppo_brightness_alpha {
+	u32 brightness;
+	u32 alpha;
+};
+#endif
 
 #define MAX_BL_LEVEL 4096
 #define MAX_BL_SCALE_LEVEL 1024
@@ -115,6 +121,10 @@ struct dsi_backlight_config {
 	u32 bl_max_level;
 	u32 brightness_max_level;
 	u32 brightness_default_level;
+#ifdef CONFIG_MACH_OPLUS_SM7150
+	u32 bl_normal_max_level;
+	u32 brightness_normal_max_level;
+#endif
 	u32 bl_level;
 	u32 bl_scale;
 	u32 bl_scale_ad;
@@ -144,6 +154,17 @@ struct dsi_panel_reset_config {
 	int disp_en_gpio;
 	int lcd_mode_sel_gpio;
 	u32 mode_sel_state;
+#ifdef CONFIG_MACH_OPLUS_SM7150
+	int lcd_vci_gpio;
+	int err_flag_gpio;
+	u32 lcd_delay_vci_gpio;
+	u32 lcd_delay_disp_en_gpio;
+	u32 lcd_delay_reset_gpio;
+	u32 lcd_delay_mode_sel_gpio;
+	u32 lcd_delay_set_pinctrl_state;
+	u32 lcd_delay_enable_regulator;
+	u32 lcd_delay_lp11_state;
+#endif
 };
 
 enum esd_check_status_mode {
@@ -167,6 +188,20 @@ struct drm_panel_esd_config {
 	u8 *status_buf;
 	u32 groups;
 };
+
+#ifdef CONFIG_MACH_OPLUS_SM7150
+struct dsi_panel_oppo_privite {
+	const char *vendor_name;
+	const char *manufacture_name;
+	bool skip_mipi_last_cmd;
+	bool is_pxlw_iris5;
+	bool is_osc_support;
+	bool is_19781_lcd;
+	u32 osc_clk_mode0_rate;
+	u32 osc_clk_mode1_rate;
+	u32 osc_clk_current_rate;
+};
+#endif
 
 struct dsi_panel {
 	const char *name;
@@ -218,6 +253,20 @@ struct dsi_panel {
 	bool sync_broadcast_en;
 	int power_mode;
 	enum dsi_panel_physical_type panel_type;
+
+#ifdef CONFIG_MACH_OPLUS_SM7150
+	bool is_hbm_enabled;
+	/* Fix aod flash problem */
+	bool need_power_on_backlight;
+  	bool reset_timing;
+	struct oppo_brightness_alpha *ba_seq;
+	struct oppo_brightness_alpha *dc_ba_seq;
+	int ba_count;
+	int dc_ba_count;
+	struct dsi_panel_oppo_privite oppo_priv;
+	bool is_err_flag_irq_enabled;
+	bool err_flag_status;
+#endif
 };
 
 static inline bool dsi_panel_ulps_feature_enabled(struct dsi_panel *panel)
@@ -337,5 +386,8 @@ struct dsi_panel *dsi_panel_ext_bridge_get(struct device *parent,
 int dsi_panel_parse_esd_reg_read_configs(struct dsi_panel *panel);
 
 void dsi_panel_ext_bridge_put(struct dsi_panel *panel);
-
+#ifdef CONFIG_MACH_OPLUS_SM7150
+int dsi_panel_tx_cmd_set(struct dsi_panel *panel,
+			   enum dsi_cmd_set_type type);
+#endif
 #endif /* _DSI_PANEL_H_ */

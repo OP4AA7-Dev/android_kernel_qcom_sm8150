@@ -18,6 +18,9 @@
 #include "sde_hw_pingpong.h"
 #include "sde_dbg.h"
 #include "sde_kms.h"
+#ifdef CONFIG_MACH_OPLUS_SM7150
+#include "oppo_dsi_support.h"
+#endif /* CONFIG_MACH_OPLUS_SM7150 */
 
 #define PP_TEAR_CHECK_EN                0x000
 #define PP_SYNC_CONFIG_VSYNC            0x004
@@ -163,6 +166,9 @@ static struct sde_pingpong_cfg *_pingpong_offset(enum sde_pingpong pp,
 	return ERR_PTR(-EINVAL);
 }
 
+#ifdef CONFIG_MACH_OPLUS_SM7150
+extern int oppo_request_power_status;
+#endif /* CONFIG_MACH_OPLUS_SM7150 */
 static int sde_hw_pp_setup_te_config(struct sde_hw_pingpong *pp,
 		struct sde_hw_tear_check *te)
 {
@@ -177,7 +183,18 @@ static int sde_hw_pp_setup_te_config(struct sde_hw_pingpong *pp,
 	if (te->hw_vsync_mode)
 		cfg |= BIT(20);
 
+#ifdef CONFIG_MACH_OPLUS_SM7150
+{
+	int temp_vclks_line = te->vsync_count;
+
+	if((oppo_request_power_status == OPPO_DISPLAY_POWER_DOZE) || (oppo_request_power_status == OPPO_DISPLAY_POWER_DOZE_SUSPEND)) {
+		temp_vclks_line = temp_vclks_line * 60 * 100 / 3000;
+	}
+	cfg |= temp_vclks_line;
+}
+#else /* CONFIG_MACH_OPLUS_SM7150 */
 	cfg |= te->vsync_count;
+#endif /* CONFIG_MACH_OPLUS_SM7150 */
 
 	SDE_REG_WRITE(c, PP_SYNC_CONFIG_VSYNC, cfg);
 	SDE_REG_WRITE(c, PP_SYNC_CONFIG_HEIGHT, te->sync_cfg_height);

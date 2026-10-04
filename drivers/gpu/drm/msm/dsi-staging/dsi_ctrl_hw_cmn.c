@@ -102,13 +102,18 @@ void dsi_ctrl_hw_cmn_host_setup(struct dsi_ctrl_hw *ctrl,
 	dsi_setup_trigger_controls(ctrl, cfg);
 	dsi_split_link_setup(ctrl, cfg);
 
+#ifdef CONFIG_MACH_OPLUS_SM7150
+	DSI_W32(ctrl, DSI_TEST_PATTERN_GEN_VIDEO_ENABLE, 1);
+#endif
 	/* Setup T_CLK_PRE extend register */
+#ifndef CONFIG_MACH_OPLUS_SM7150
 	reg_value = DSI_R32(ctrl, DSI_TEST_PATTERN_GEN_VIDEO_ENABLE);
 	if (cfg->t_clk_pre_extend)
 		reg_value |= BIT(0);
 	else
 		reg_value &= ~BIT(0);
 	DSI_W32(ctrl, DSI_TEST_PATTERN_GEN_VIDEO_ENABLE, reg_value);
+#endif
 
 	/* Setup clocking timing controls */
 	reg_value = ((cfg->t_clk_post & 0x3F) << 8);
@@ -199,6 +204,9 @@ void dsi_ctrl_hw_cmn_soft_reset(struct dsi_ctrl_hw *ctrl)
 	DSI_W32(ctrl, DSI_CTRL, reg_ctrl);
 	wmb(); /* make sure DSI controller is enabled again */
 	pr_debug("[DSI_%d] ctrl soft reset done\n", ctrl->index);
+#ifdef CONFIG_MACH_OPLUS_SM7150
+	SDE_EVT32(ctrl->index);
+#endif
 }
 
 /**
@@ -698,6 +706,9 @@ void dsi_ctrl_hw_cmn_kickoff_command(struct dsi_ctrl_hw *ctrl,
 
 	if (!(flags & DSI_CTRL_HW_CMD_WAIT_FOR_TRIGGER))
 		DSI_W32(ctrl, DSI_CMD_MODE_DMA_SW_TRIGGER, 0x1);
+#ifdef CONFIG_MACH_OPLUS_SM7150
+	SDE_EVT32(ctrl->index, cmd->offset, cmd->length, cmd->en_broadcast, (cmd->use_lpm));
+#endif
 }
 
 /**
