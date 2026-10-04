@@ -61,4 +61,8 @@ int dsi_display_oppo_set_power(struct drm_connector *connector, int power_mode, 
 
 int oppo_display_dynamic_clk_update_osc_clk(int clk_rate);
 
+/* Screen-off fingerprint trigger state (see /sys/kernel/oppo_display/fp_state) */
+extern int oplus_fp_state;
+void oplus_display_set_fp_state(int state);
+
 #endif /* _OPPO_DISPLAY_PRIVATE_API_H_ */
