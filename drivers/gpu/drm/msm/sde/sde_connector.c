@@ -95,24 +95,32 @@ static int sde_backlight_device_update_status(struct backlight_device *bd)
 
 	c_conn = bl_get_data(bd);
 	display = (struct dsi_display *) c_conn->display;
-	if (brightness > display->panel->bl_config.bl_max_level)
-		brightness = display->panel->bl_config.bl_max_level;
+	if (brightness > display->panel->bl_config.brightness_max_level)
+		brightness = display->panel->bl_config.brightness_max_level;
 
 #ifndef CONFIG_MACH_OPLUS_SM7150
 	/* map UI brightness into driver backlight level with rounding */
 	bl_lvl = mult_frac(brightness, display->panel->bl_config.bl_max_level,
 			display->panel->bl_config.brightness_max_level);
 #else /* CONFIG_MACH_OPLUS_SM7150 */
-		if (brightness > display->panel->bl_config.brightness_normal_max_level) {
-			bl_lvl = interpolate(brightness,
-					display->panel->bl_config.brightness_normal_max_level,
-					display->panel->bl_config.brightness_max_level,
-					display->panel->bl_config.bl_normal_max_level,
-					display->panel->bl_config.bl_max_level);
-		} else {
-			bl_lvl = mult_frac(brightness, display->panel->bl_config.bl_normal_max_level,
-					display->panel->bl_config.brightness_normal_max_level);
-		}
+	if (unlikely(display->panel->bl_config.brightness_normal_max_level == 0 ||
+		display->panel->bl_config.brightness_normal_max_level == display->panel->bl_config.brightness_max_level)) {
+		SDE_ERROR("invalid brightness_normal_max_level cfg, fallback to linear map\n");
+		bl_lvl = mult_frac(brightness, display->panel->bl_config.bl_max_level,
+				display->panel->bl_config.brightness_max_level ?: 1);
+	} else if (brightness > display->panel->bl_config.brightness_normal_max_level) {
+		bl_lvl = interpolate(brightness,
+				display->panel->bl_config.brightness_normal_max_level,
+				display->panel->bl_config.brightness_max_level,
+				display->panel->bl_config.bl_normal_max_level,
+				display->panel->bl_config.bl_max_level);
+	} else {
+		bl_lvl = mult_frac(brightness, display->panel->bl_config.bl_normal_max_level,
+				display->panel->bl_config.brightness_normal_max_level);
+	}
+	
+	if (bl_lvl > display->panel->bl_config.bl_max_level)
+		bl_lvl = display->panel->bl_config.bl_max_level;
 #endif /* CONFIG_MACH_OPLUS_SM7150 */
 
 	if (!bl_lvl && brightness)
