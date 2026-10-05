@@ -15,6 +15,13 @@
 
 #include <linux/bitops.h>
 
+
+#ifdef CONFIG_OPLUS_CHARGER
+#ifdef CONFIG_OPLUS_SM7150R_CHARGER
+#include "../../oplus/charger_ic/oplus_battery_sm7150_R.h"
+#endif
+#endif
+
 #define SCHGM_FLASH_BASE			0xA600
 
 #define SCHGM_FLASH_STATUS_2_REG		(SCHGM_FLASH_BASE + 0x07)

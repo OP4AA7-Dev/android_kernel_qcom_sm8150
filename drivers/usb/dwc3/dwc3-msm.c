@@ -3881,6 +3881,9 @@ static int dwc_dpdm_cb(struct notifier_block *nb, unsigned long evt, void *p)
 				dwc3_drd_state_string(mdwc->drd_state));
 		if (mdwc->drd_state == DRD_STATE_UNDEFINED)
 			queue_delayed_work(mdwc->sm_usb_wq, &mdwc->sm_work, 0);
+#ifdef CONFIG_OPLUS_CHARGER
+			queue_delayed_work(mdwc->sm_usb_wq, &mdwc->sm_work, 0);
+#endif
 		break;
 	default:
 		dev_dbg(mdwc->dev, "%s: unknown event state:%s\n", __func__,
@@ -4954,9 +4957,22 @@ static int dwc3_msm_gadget_vbus_draw(struct dwc3_msm *mdwc, unsigned int mA)
 
 	/* Set max current limit in uA */
 	pval.intval = 1000 * mA;
+#ifdef CONFIG_OPLUS_CHARGER
+	dev_info(mdwc->dev, "Avail curr from USB = %u, pre max_power = %u\n", mA, mdwc->max_power);
+	if (mA == 0 || mA == 2) {
+		return 0;
+	}
+#endif
 
 set_prop:
+#ifdef CONFIG_OPLUS_CHARGER
+/* Yichun.Chen  PSW.BSP.CHG  2019-05-05  for charging */
+	dev_info(mdwc->dev, "[OPPO_CHG]Avail curr from USB = %u, pre max_power = %u\n", mA, mdwc->max_power);
+	if (mA == 0 || mA == 2)
+		return 0;
+#else
 	dev_info(mdwc->dev, "Avail curr from USB = %u\n", mA);
+#endif
 	ret = power_supply_set_property(mdwc->usb_psy,
 				POWER_SUPPLY_PROP_SDP_CURRENT_MAX, &pval);
 	if (ret) {
@@ -4968,6 +4984,11 @@ set_prop:
 	return 0;
 }
 
+#ifdef CONFIG_OPLUS_CHARGER
+/* Yichun.Chen  PSW.BSP.CHG  2019-08-07  for detect CDP */
+#define DWC3_DCTL		0xc704 
+#define DWC3_DCTL_RUN_STOP	BIT(31) 
+#endif
 
 /**
  * dwc3_otg_sm_work - workqueue function.
@@ -4985,6 +5006,11 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 	unsigned long delay = 0;
 	const char *state;
 
+#ifdef CONFIG_OPLUS_CHARGER
+/* Yichun.Chen  PSW.BSP.CHG  2019-08-07  for detect CDP */
+	u32 reg; 
+#endif
+	
 	if (mdwc->dwc3)
 		dwc = platform_get_drvdata(mdwc->dwc3);
 
@@ -5054,6 +5080,16 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 			dwc3_otg_start_peripheral(mdwc, 1);
 			mdwc->drd_state = DRD_STATE_PERIPHERAL;
 			work = 1;
+#ifdef CONFIG_OPLUS_CHARGER
+/* Yichun.Chen  PSW.BSP.CHG  2019-08-07  for detect CDP */
+			if (!dwc->softconnect && get_psy_type(mdwc) == POWER_SUPPLY_TYPE_USB_CDP) { 
+				dbg_event(0xFF, "cdp pullup dp", 0); 
+				reg = dwc3_readl(dwc->regs, DWC3_DCTL); 
+				reg |= DWC3_DCTL_RUN_STOP; 
+				dwc3_writel(dwc->regs, DWC3_DCTL, reg); 
+				break; 
+			}
+#endif
 		} else {
 			if (mdwc->usb_data_enabled)
 				dwc3_msm_gadget_vbus_draw(mdwc, 0);

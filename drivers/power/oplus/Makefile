@@ -1,0 +1,9 @@
+obj-$(CONFIG_OPLUS_CHARGER)      += charger_ic/
+obj-$(CONFIG_OPLUS_CHARGER)      += gauge_ic/
+obj-$(CONFIG_OPLUS_CHARGER)      += vooc_ic/
+obj-$(CONFIG_OPLUS_CHARGER)      += adapter_ic/
+obj-$(CONFIG_OPLUS_CHARGER)	+= oplus_charger.o
+obj-$(CONFIG_OPLUS_CHARGER)	+= oplus_gauge.o
+obj-$(CONFIG_OPLUS_CHARGER)	+= oplus_vooc.o
+obj-$(CONFIG_OPLUS_CHARGER)	+= oplus_adapter.o
+obj-$(CONFIG_OPLUS_CHARGER)	+= oplus_short.o

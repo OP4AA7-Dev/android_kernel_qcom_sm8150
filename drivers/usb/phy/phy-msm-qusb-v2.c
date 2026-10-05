@@ -27,6 +27,10 @@
 #include <linux/usb/phy.h>
 #include <linux/reset.h>
 #include <linux/debugfs.h>
+#ifdef CONFIG_OPLUS_CHARGER
+/* Yichun.Chen  PSW.BSP.CHG  2019-06-03  for usb eye */
+#include <soc/oplus/oplus_project.h>
+#endif
 
 /* QUSB2PHY_PWR_CTRL1 register related bits */
 #define PWR_CTRL1_POWR_DOWN		BIT(0)
@@ -466,7 +470,7 @@ static void qusb_phy_host_init(struct usb_phy *phy)
 
 	qusb_phy_write_seq(qphy->base, qphy->qusb_phy_host_init_seq,
 			qphy->host_init_seq_len, 0);
-
+#ifndef CONFIG_OPLUS_CHARGER
 	if (qphy->efuse_reg) {
 		if (!qphy->tune_val)
 			qusb_phy_get_tune1_param(qphy);
@@ -478,7 +482,9 @@ static void qusb_phy_host_init(struct usb_phy *phy)
 		qphy->tune_val = readb_relaxed(qphy->base +
 					qphy->phy_reg[PORT_TUNE1]);
 	}
-
+#else
+	qusb_phy_get_tune1_param(qphy);
+#endif
 	writel_relaxed(qphy->tune_val | BIT(7),
 		qphy->base + qphy->phy_reg[PORT_TUNE1]);
 	pr_debug("%s(): Programming TUNE1 parameter as:%x\n",
@@ -517,6 +523,178 @@ static void qusb_phy_host_init(struct usb_phy *phy)
 	}
 }
 
+#ifdef CONFIG_OPLUS_CHARGER
+/* Yichun.Chen  PSW.BSP.CHG  2019-06-03  for usb eye */
+static int MP_DEVICE_TUNE1 = 0x77;
+module_param_named(MP_DEVICE_TUNE1, MP_DEVICE_TUNE1, int, 0600);
+static int MP_DEVICE_TUNE2;
+module_param_named(MP_DEVICE_TUNE2, MP_DEVICE_TUNE2, int, 0600);
+static int MP_DEVICE_TUNE3;
+module_param_named(MP_DEVICE_TUNE3, MP_DEVICE_TUNE3, int, 0600);
+static int MP_DEVICE_TUNE4;
+module_param_named(MP_DEVICE_TUNE4, MP_DEVICE_TUNE4, int, 0600);
+static int MP_DEVICE_TUNE5;
+module_param_named(MP_DEVICE_TUNE5, MP_DEVICE_TUNE5, int, 0600);
+static int MP_DEVICE_BIAS2 = 0x1E;
+module_param_named(MP_DEVICE_BIAS2, MP_DEVICE_BIAS2, int, 0600);
+
+#ifdef CONFIG_OPLUS_SM7150R_CHARGER
+	static int MP_HOST_TUNE1 = 0x77;
+#else
+	static int MP_HOST_TUNE1;
+#endif
+module_param_named(MP_HOST_TUNE1, MP_HOST_TUNE1, int, 0600);
+static int MP_HOST_TUNE2;
+module_param_named(MP_HOST_TUNE2, MP_HOST_TUNE2, int, 0600);
+static int MP_HOST_TUNE3;
+module_param_named(MP_HOST_TUNE3, MP_HOST_TUNE3, int, 0600);
+static int MP_HOST_TUNE4;
+module_param_named(MP_HOST_TUNE4, MP_HOST_TUNE4, int, 0600);
+static int MP_HOST_TUNE5;
+module_param_named(MP_HOST_TUNE5, MP_HOST_TUNE5, int, 0600);
+static int MP_HOST_BIAS2;
+module_param_named(MP_HOST_BIAS2, MP_HOST_BIAS2, int, 0600);
+
+#ifdef CONFIG_OPLUS_SM7150R_CHARGER
+static int DEVICE_TUNE1 = 0x77;
+static int DEVICE_BIAS2 = 0x22;
+static int HOST_TUNE1 = 0x77;
+static int HOST_TUNE2 = 0x29;
+static int HOST_BIAS2 = 0x22;
+#endif
+
+static int DEVICE_TUNE1;
+module_param_named(DEVICE_TUNE1, DEVICE_TUNE1, int, 0600);
+static int DEVICE_TUNE2;
+module_param_named(DEVICE_TUNE2, DEVICE_TUNE2, int, 0600);
+static int DEVICE_TUNE3;
+module_param_named(DEVICE_TUNE3, DEVICE_TUNE3, int, 0600);
+static int DEVICE_TUNE4;
+module_param_named(DEVICE_TUNE4, DEVICE_TUNE4, int, 0600);
+static int DEVICE_TUNE5;
+module_param_named(DEVICE_TUNE5, DEVICE_TUNE5, int, 0600);
+static int DEVICE_BIAS2;
+module_param_named(DEVICE_BIAS2, DEVICE_BIAS2, int, 0600);
+
+static int HOST_TUNE1;
+module_param_named(HOST_TUNE1, HOST_TUNE1, int, 0600);
+static int HOST_TUNE2;
+module_param_named(HOST_TUNE2, HOST_TUNE2, int, 0600);
+static int HOST_TUNE3;
+module_param_named(HOST_TUNE3, HOST_TUNE3, int, 0600);
+static int HOST_TUNE4;
+module_param_named(HOST_TUNE4, HOST_TUNE4, int, 0600);
+static int HOST_TUNE5;
+module_param_named(HOST_TUNE5, HOST_TUNE5, int, 0600);
+static int HOST_BIAS2;
+module_param_named(HOST_BIAS2, HOST_BIAS2, int, 0600);
+
+static void mp_override_phy_tune(struct usb_phy *phy)
+{
+	struct qusb_phy *qphy = container_of(phy, struct qusb_phy, phy);
+
+	if (qphy->phy.flags & PHY_HOST_MODE) {
+		if (MP_HOST_TUNE1 != 0)
+			writel_relaxed(MP_HOST_TUNE1, qphy->base + 0x240);
+		if (MP_HOST_TUNE2 != 0)
+			writel_relaxed(MP_HOST_TUNE2, qphy->base + 0x244);
+		if (MP_HOST_TUNE3 != 0)
+			writel_relaxed(MP_HOST_TUNE3, qphy->base + 0x248);
+		if (MP_HOST_TUNE4 != 0)
+			writel_relaxed(MP_HOST_TUNE4, qphy->base + 0x24C);
+		if (MP_HOST_TUNE5 != 0)
+			writel_relaxed(MP_HOST_TUNE5, qphy->base + 0x250);
+		if (MP_HOST_BIAS2 != 0)
+			writel_relaxed(MP_HOST_BIAS2, qphy->base + qphy->phy_reg[BIAS_CTRL_2]);
+	} else {
+		if (MP_DEVICE_TUNE1 != 0)
+			writel_relaxed(MP_DEVICE_TUNE1, qphy->base + 0x240);
+		if (MP_DEVICE_TUNE2 != 0)
+			writel_relaxed(MP_DEVICE_TUNE2, qphy->base + 0x244);
+		if (MP_DEVICE_TUNE3 != 0)
+			writel_relaxed(MP_DEVICE_TUNE3, qphy->base + 0x248);
+		if (MP_DEVICE_TUNE4 != 0)
+			writel_relaxed(MP_DEVICE_TUNE4, qphy->base + 0x24C);
+		if (MP_DEVICE_TUNE5 != 0)
+			writel_relaxed(MP_DEVICE_TUNE5, qphy->base + 0x250);
+		if (MP_DEVICE_BIAS2 != 0)
+			writel_relaxed(MP_DEVICE_BIAS2, qphy->base + qphy->phy_reg[BIAS_CTRL_2]);
+	}
+
+	dev_err(phy->dev, "%s %x %x %x %x %x %x %x\n", __func__,
+		readb_relaxed(qphy->base + qphy->phy_reg[BIAS_CTRL_2]),
+		readb_relaxed(qphy->base + 0x240), readb_relaxed(qphy->base + 0x244),
+		readb_relaxed(qphy->base + 0x248), readb_relaxed(qphy->base + 0x24C),
+		readb_relaxed(qphy->base + 0x250), qphy->phy.flags & PHY_HOST_MODE);
+
+	return;
+}
+
+static void override_phy_tune(struct usb_phy *phy)
+{
+	struct qusb_phy *qphy = container_of(phy, struct qusb_phy, phy);
+
+	if (qphy->phy.flags & PHY_HOST_MODE) {
+		if (HOST_TUNE1 != 0)
+			writel_relaxed(HOST_TUNE1, qphy->base + 0x240);
+		if (HOST_TUNE2 != 0)
+			writel_relaxed(HOST_TUNE2, qphy->base + 0x244);
+		
+		if (HOST_TUNE3 != 0)
+			writel_relaxed(HOST_TUNE3, qphy->base + 0x248);
+		if (HOST_TUNE4 != 0)
+			writel_relaxed(HOST_TUNE4, qphy->base + 0x24C);
+		if (HOST_TUNE5 != 0)
+			writel_relaxed(HOST_TUNE5, qphy->base + 0x250);
+		if (HOST_BIAS2 != 0)
+			writel_relaxed(HOST_BIAS2, qphy->base + qphy->phy_reg[BIAS_CTRL_2]);
+		if (get_project() == 19111) {
+			writel_relaxed(0xF7, qphy->base + 0x240);
+			writel_relaxed(0x03, qphy->base + 0x244);
+			writel_relaxed(0x1B, qphy->base + qphy->phy_reg[BIAS_CTRL_2]);
+		}
+		HOST_TUNE1 = readb_relaxed(qphy->base + 0x240);
+		HOST_TUNE2 = readb_relaxed(qphy->base + 0x244);
+		HOST_TUNE3 = readb_relaxed(qphy->base + 0x248);
+		HOST_TUNE4 = readb_relaxed(qphy->base + 0x24C);
+		HOST_TUNE5 = readb_relaxed(qphy->base + 0x250);
+		HOST_BIAS2 = readb_relaxed(qphy->base + qphy->phy_reg[BIAS_CTRL_2]);
+	} else {
+		if (DEVICE_TUNE1 != 0)
+			writel_relaxed(DEVICE_TUNE1, qphy->base + 0x240);
+		if (DEVICE_TUNE2 != 0)
+			writel_relaxed(DEVICE_TUNE2, qphy->base + 0x244);
+		if (DEVICE_TUNE3 != 0)
+			writel_relaxed(DEVICE_TUNE3, qphy->base + 0x248);
+		if (DEVICE_TUNE4 != 0)
+			writel_relaxed(DEVICE_TUNE4, qphy->base + 0x24C);
+		if (DEVICE_TUNE5 != 0)
+			writel_relaxed(DEVICE_TUNE5, qphy->base + 0x250);
+		if (DEVICE_BIAS2 != 0)
+			writel_relaxed(DEVICE_BIAS2, qphy->base + qphy->phy_reg[BIAS_CTRL_2]);
+		if (get_project() == 19111) {
+			writel_relaxed(0xF7, qphy->base + 0x240);
+			writel_relaxed(0x0C, qphy->base + 0x244);
+			writel_relaxed(0x1E, qphy->base + qphy->phy_reg[BIAS_CTRL_2]);
+		}
+		DEVICE_TUNE1 = readb_relaxed(qphy->base + 0x240);
+		DEVICE_TUNE2 = readb_relaxed(qphy->base + 0x244);
+		DEVICE_TUNE3 = readb_relaxed(qphy->base + 0x248);
+		DEVICE_TUNE4 = readb_relaxed(qphy->base + 0x24C);
+		DEVICE_TUNE5 = readb_relaxed(qphy->base + 0x250);
+		DEVICE_BIAS2 = readb_relaxed(qphy->base + qphy->phy_reg[BIAS_CTRL_2]);
+	}
+
+	dev_err(phy->dev, "%s %x %x %x %x %x %x %x\n", __func__,
+		readb_relaxed(qphy->base + qphy->phy_reg[BIAS_CTRL_2]),
+		readb_relaxed(qphy->base + 0x240), readb_relaxed(qphy->base + 0x244),
+		readb_relaxed(qphy->base + 0x248), readb_relaxed(qphy->base + 0x24C),
+		readb_relaxed(qphy->base + 0x250), qphy->phy.flags & PHY_HOST_MODE);
+
+	return;
+}
+#endif
+
 static int qusb_phy_init(struct usb_phy *phy)
 {
 	struct qusb_phy *qphy = container_of(phy, struct qusb_phy, phy);
@@ -529,6 +707,13 @@ static int qusb_phy_init(struct usb_phy *phy)
 
 	if (qphy->qusb_phy_host_init_seq && qphy->phy.flags & PHY_HOST_MODE) {
 		qusb_phy_host_init(phy);
+#ifdef CONFIG_OPLUS_CHARGER
+/* Yichun.Chen  PSW.BSP.CHG  2019-06-03  for usb eye */
+		if ((get_project() == 19031) && get_PCB_Version() >= MP1)
+			mp_override_phy_tune(phy);
+		else
+			override_phy_tune(phy);
+#endif
 		return 0;
 	}
 
@@ -591,6 +776,14 @@ static int qusb_phy_init(struct usb_phy *phy)
 	if (qphy->bias_ctrl2)
 		writel_relaxed(qphy->bias_ctrl2,
 				qphy->base + qphy->phy_reg[BIAS_CTRL_2]);
+
+#ifdef CONFIG_OPLUS_CHARGER
+/* Yichun.Chen  PSW.BSP.CHG  2019-06-03  for usb eye */
+	if ((get_project() == 19031) && get_PCB_Version() >= MP1)
+		mp_override_phy_tune(phy);
+	else
+		override_phy_tune(phy);
+#endif
 
 	/* ensure above writes are completed before re-enabling PHY */
 	wmb();
